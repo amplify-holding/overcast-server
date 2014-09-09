@@ -1,7 +1,6 @@
 package amplify;
 
 import org.vertx.java.core.Handler;
-import org.vertx.java.core.eventbus.Message;
 import org.vertx.java.core.http.HttpServerRequest;
 import org.vertx.java.platform.Verticle;
 
@@ -16,6 +15,5 @@ public class MetricsVerticle extends Verticle {
         }).listen(8200, "localhost");
 
         container.logger().info("MetricsVerticle started");
-        container.deployVerticle("PingVerticle.java");
     }
 }
