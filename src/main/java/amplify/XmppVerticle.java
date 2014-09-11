@@ -7,7 +7,6 @@ import org.vertx.java.platform.Verticle;
 
 public class XmppVerticle extends Verticle {
     private static XmppGcmClient gcmClient;
-    private int holdValue = 4;
 
     public void start() {
         gcmClient = new XmppGcmClient();
@@ -15,7 +14,6 @@ public class XmppVerticle extends Verticle {
             @Override
             public void handle(org.vertx.java.core.eventbus.Message<JsonObject> message) {
                 container.logger().info("Starting XMPP service.");
-                container.logger().info("Hello number " + holdValue++);
 
                 try {
                     JsonObject messageDetails = message.body();
@@ -23,6 +21,7 @@ public class XmppVerticle extends Verticle {
 
                     message.reply();
                 } catch (Exception e) {
+
                     message.fail(0, e.toString());
                     container.logger().error("Connecting to the xmpp server failed: " + e.toString());
                 }
@@ -36,7 +35,6 @@ public class XmppVerticle extends Verticle {
             @Override
             public void handle(org.vertx.java.core.eventbus.Message<JsonObject> message) {
                 container.logger().info("sending message through XMPP service.");
-                container.logger().info("Hello number " + holdValue++);
 
                 JsonObject messageDetails = message.body();
                 String encodedMessage = XmppGcmClient.transformSendMessage(messageDetails, XmppGcmClient.nextMessageId());

@@ -16,6 +16,8 @@
 
 package net.atarno.vertx.gcm.server;
 
+import amplify.GABuildType;
+import amplify.GASeverity;
 import org.vertx.java.busmods.BusModBase;
 import org.vertx.java.core.Handler;
 import org.vertx.java.core.VoidHandler;
@@ -31,6 +33,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.HashMap;
+import java.util.Random;
 
 /**
  * GCM Server busmod<p>
@@ -54,6 +57,7 @@ public class GCMServer extends BusModBase implements Handler<Message<JsonObject>
     private int gcm_max_backoff_delay;
     private URI uri;
     private HttpClient client;
+    private static String session_id = String.valueOf(new Random().nextLong());
 
     @Override
     public void start() {
@@ -71,8 +75,7 @@ public class GCMServer extends BusModBase implements Handler<Message<JsonObject>
         try {
             uri = new URI( voidNull( gcm_url ) );
         }
-        catch ( URISyntaxException e ) {
-        }
+        catch ( URISyntaxException e ) {}
 
         client = vertx.createHttpClient()
                 .setHost( uri.getHost() )
@@ -139,6 +142,18 @@ public class GCMServer extends BusModBase implements Handler<Message<JsonObject>
         }
     }
 
+    @Override
+    protected void sendError(Message<JsonObject> message, String error) {
+        super.sendError(message, error);
+        vertx.eventBus().send("send-metric", getErrorMetricJson(error, GASeverity.ERROR));
+    }
+
+    @Override
+    protected void sendError(Message<JsonObject> message, String error, Exception e) {
+        super.sendError(message, error, e);
+        vertx.eventBus().send("send-metric", getErrorMetricJson(error, GASeverity.ERROR));
+    }
+
     private JsonObject calculateSummary( JsonArray regIds, HashMap<String, JsonObject> response, long multicastId ) {
         int success = 0;
         int failure = 0;
@@ -195,8 +210,9 @@ public class GCMServer extends BusModBase implements Handler<Message<JsonObject>
     }
 
     private void send( Message<JsonObject> message, JsonObject notif, String apiKey ) {
-        logger.debug( "Sending POST to: " + gcm_url + " port:" + gcm_port + " with body: " + notif );
-
+        String debugString = "Sending POST to: " + gcm_url + " port:" + gcm_port + " with body: " + notif;
+        logger.debug( debugString );
+        vertx.eventBus().send("send-metric", getErrorMetricJson(debugString, GASeverity.DEBUG));
         ResponseHelper helper = new ResponseHelper( gcm_min_backoff_delay );
 
         submitGCM( helper, notif, apiKey, message, 0 );
@@ -213,7 +229,9 @@ public class GCMServer extends BusModBase implements Handler<Message<JsonObject>
             logger.error( e.getMessage() );
             return;
         }
-        logger.debug( "Attempt #" + ( attempt + 1 ) + " to send notification to regIds " + notif.getArray( "registration_ids" ).encode() );
+        String debugString = "Attempt #" + ( attempt + 1 ) + " to send notification to regIds " + notif.getArray( "registration_ids" ).encode();
+        logger.debug(debugString);
+        vertx.eventBus().send("send-metric", getErrorMetricJson(debugString, GASeverity.DEBUG));
         HttpClientRequest request = client.post( uri.getPath(), new Handler<HttpClientResponse>() {
             @Override
             public void handle( final HttpClientResponse resp ) {
@@ -237,6 +255,7 @@ public class GCMServer extends BusModBase implements Handler<Message<JsonObject>
                         }
                         else {
                             logger.error( "GCM error response: " + body );
+                            vertx.eventBus().send("send-metric", getErrorMetricJson( "GCM error response: " + body, GASeverity.ERROR));
                         }
                         if ( reply[ 0 ] != null ) {
                             helper.setMulticastId( reply[ 0 ].getLong( "multicast_id" ) == null ? 0 : reply[ 0 ].getLong( "multicast_id" ) );
@@ -251,12 +270,12 @@ public class GCMServer extends BusModBase implements Handler<Message<JsonObject>
                             try {
                                 Thread.sleep( sleepTime );
                             }
-                            catch ( InterruptedException ie ) {
-                            }
+                            catch ( InterruptedException ie ) {}
+
                             if ( 2 * helper.getBackoff() < gcm_max_backoff_delay ) {
                                 helper.setBackoff( helper.getBackoff() * 2 );
                             }
-                            submitGCM( helper, newNotif, apiKey,message, attempt + 1 );
+                            submitGCM( helper, newNotif, apiKey, message, attempt + 1 );
                         }
                         else {
                             if ( helper.getResponse().isEmpty() ) {
@@ -281,5 +300,17 @@ public class GCMServer extends BusModBase implements Handler<Message<JsonObject>
 
     private String voidNull( String s ) {
         return s == null ? "" : s;
+    }
+
+    private JsonObject getErrorMetricJson(String message, GASeverity severity){
+
+        JsonObject jsonObject = new JsonObject();
+        jsonObject.putString("user_id", "http_gcm_server");
+        jsonObject.putString("session_id", session_id);
+        jsonObject.putString("build", GABuildType.QA.toString());
+        jsonObject.putString("message", message);
+        jsonObject.putString("message", severity.toString());
+
+        return jsonObject;
     }
 }

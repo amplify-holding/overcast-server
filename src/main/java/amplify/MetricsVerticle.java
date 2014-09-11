@@ -14,7 +14,6 @@ public class MetricsVerticle extends Verticle {
     public static final String SECRET_KEY = "417cae80d8054acd1c8619dad0b3dda13b1662f0";
     public static final String GAME_ANALYTICS_URL = "api.gameanalytics.com";
     public static final String API_VERSION = "1";
-    private static final String CATEGORY = "design";
 
     private HttpClient client;
 
@@ -41,7 +40,14 @@ public class MetricsVerticle extends Verticle {
     }
 
     private void sendMetric(final org.vertx.java.core.eventbus.Message<JsonObject> message, JsonObject jsonObject) {
-        String uri = "/"+ API_VERSION + "/" + GAME_KEY + "/" + CATEGORY + "/";
+        String uri = "/"+ API_VERSION + "/" + GAME_KEY + "/";
+
+        if(GABuildType.DESIGN.toString().equals(jsonObject.getString("build")))
+            uri += "design" + "/";
+        else if(GABuildType.DESIGN.toString().equals(jsonObject.getString("build"))) {
+            uri += "error" + "/";
+        }
+
         HttpClientRequest request = client.post(uri , new Handler<HttpClientResponse>() {
             @Override
             public void handle(HttpClientResponse event) {
@@ -49,7 +55,6 @@ public class MetricsVerticle extends Verticle {
                 message.reply(event.statusCode());
             }
         });
-
 
         String content = jsonObject.encode();
         request.putHeader("Authorization", DigestUtils.md5Hex(content + SECRET_KEY));

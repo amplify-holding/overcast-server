@@ -1,5 +1,6 @@
 package amplify.integration.java;
 
+import amplify.GABuildType;
 import org.junit.Test;
 import org.vertx.java.core.AsyncResult;
 import org.vertx.java.core.Handler;
@@ -44,7 +45,7 @@ public class MetricsTest extends TestVerticle {
         JsonObject jsonObject = new JsonObject();
         jsonObject.putString("user_id", userId);
         jsonObject.putString("session_id", sessionId);
-        jsonObject.putString("build", "DesignTest");
+        jsonObject.putString("build", GABuildType.DESIGN.toString());
         jsonObject.putString("event_id", eventId);
         jsonObject.putNumber("value", value);
 
