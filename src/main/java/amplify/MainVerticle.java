@@ -4,6 +4,8 @@ import org.vertx.java.core.AsyncResult;
 import org.vertx.java.core.AsyncResultHandler;
 import org.vertx.java.core.Handler;
 import org.vertx.java.core.eventbus.Message;
+import org.vertx.java.core.http.HttpClient;
+import org.vertx.java.core.http.HttpServerRequest;
 import org.vertx.java.core.json.JsonArray;
 import org.vertx.java.core.json.JsonObject;
 import org.vertx.java.platform.Verticle;
@@ -11,35 +13,50 @@ import org.vertx.java.platform.Verticle;
 
 public class MainVerticle extends Verticle {
     private String address;
+    private HttpClient client;
 
     public void start() {
         container.deployVerticle("amplify.MetricsVerticle", new Handler<AsyncResult<String>>() {
             @Override
             public void handle(AsyncResult<String> event) {
-                setupAndCallXmpp();
-                setupAndCallHttp();
+                setupXmpp();
+                setupHttp();
             }
         });
+
+        vertx.createHttpServer().requestHandler(new Handler<HttpServerRequest>() {
+            public void handle(HttpServerRequest request) {
+                container.logger().info("A request has arrived on the server!");
+                if(request.path().contains("xmpp/performance")) {
+                    container.logger().info("sending a xmpp message!");
+
+                    JsonObject payload = new JsonObject();
+                    JsonObject messageParams = new JsonObject();
+                    payload.putString("Hello", "World");
+                    payload.putString("CCS", "Dummy Message");
+
+                    messageParams.putObject("payload", payload);
+                    messageParams.putString("collapseKey", "sample");
+                    messageParams.putString("toRegId", "APA91bGmNQVWs0apw3ioVOGAqlbBw2lLxvw3jTBcBfgP_6Mr0u-900Fg9UOnXrsWO1woniZ_JwmMiZlXRHZ4BeFLGq89qp2PWpaif7br9F0l4Q612LFXGjIuUkNLC6UkHSozLYZiwvSNFX8ju9FAdYY0oTcEByloeA");
+                    messageParams.putNumber("timeToLive", 10000L);
+                    messageParams.putBoolean("delayWhileIdle", true);
+
+                    vertx.eventBus().send("send-message", messageParams);
+                }
+                else if (request.path().contains("http/performance")) {
+                    callHttp();
+                }
+
+                request.response().end();
+            }
+        }).listen(8080, "localhost");
     }
 
-    private void setupAndCallXmpp() {
+    private void setupXmpp() {
         vertx.eventBus().registerHandler("authenticated", new Handler<Message>() {
             @Override
             public void handle(Message event) {
-                container.logger().info("sending a xmpp message!");
-
-                JsonObject payload = new JsonObject();
-                JsonObject messageParams = new JsonObject();
-                payload.putString("Hello", "World");
-                payload.putString("CCS", "Dummy Message");
-
-                messageParams.putObject("payload", payload);
-                messageParams.putString("collapseKey", "sample");
-                messageParams.putString("toRegId", "APA91bGmNQVWs0apw3ioVOGAqlbBw2lLxvw3jTBcBfgP_6Mr0u-900Fg9UOnXrsWO1woniZ_JwmMiZlXRHZ4BeFLGq89qp2PWpaif7br9F0l4Q612LFXGjIuUkNLC6UkHSozLYZiwvSNFX8ju9FAdYY0oTcEByloeA");
-                messageParams.putNumber("timeToLive", 10000L);
-                messageParams.putBoolean("delayWhileIdle", true);
-
-                vertx.eventBus().send("send-message", messageParams);
+                container.logger().info("Xmpp Service is up!");
             }
         });
 
@@ -55,7 +72,7 @@ public class MainVerticle extends Verticle {
         });
     }
 
-    private void setupAndCallHttp() {
+    private void setupHttp() {
         address = "test.vertx.gcm";
 
         JsonObject config = new JsonObject();
@@ -69,7 +86,6 @@ public class MainVerticle extends Verticle {
             @Override
             public void handle(AsyncResult<String> stringAsyncResult) {
                 container.logger().info("Http GCM Server is up");
-                callHttp();
             }
         });
     }
@@ -97,7 +113,7 @@ public class MainVerticle extends Verticle {
         notif.putObject( "notification", n );
         Handler<Message<JsonObject>> replyHandler = new Handler<Message<JsonObject>>() {
             public void handle( Message<JsonObject> message ) {
-                System.out.println( "Http received: \n" + message.body().encode() );
+                System.out.println("Http received: \n" + message.body().encode());
             }
         };
         vertx.eventBus().send( address, notif, replyHandler );

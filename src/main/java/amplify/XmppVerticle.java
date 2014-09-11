@@ -24,6 +24,7 @@ public class XmppVerticle extends Verticle {
 
                     message.fail(0, e.toString());
                     container.logger().error("Connecting to the xmpp server failed: " + e.toString());
+                    vertx.eventBus().send("send-metric", MetricsVerticle.getErrorMetricJson(e.toString(), GASeverity.ERROR));
                 }
 
                 container.logger().info("Sent back pong after a " + message.body());
@@ -43,6 +44,8 @@ public class XmppVerticle extends Verticle {
                     message.reply();
                 } catch (SmackException.NotConnectedException e) {
                     message.fail(0, e.toString());
+                    vertx.eventBus().send("send-metric", MetricsVerticle.getErrorMetricJson(e.toString(), GASeverity.ERROR));
+
                 }
                 container.logger().info("Sent back pong after a " + message.body());
 

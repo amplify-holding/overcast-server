@@ -30,14 +30,6 @@ public class MetricsVerticle extends Verticle {
                 }
             });
 
-        /*client.requestHandler(new Handler<HttpServerRequest>() {
-            public void handle(HttpServerRequest request) {
-                container.logger().info("A request has arrived on the server!");
-                request.response().end();
-                vertx.eventBus().send("ping-address", "ping!");
-            }
-        }).listen(8200, "localhost");*/
-
         container.logger().info("Metrics Verticle started");
     }
 
@@ -49,7 +41,7 @@ public class MetricsVerticle extends Verticle {
         else if(GABuildType.QA.toString().equals(jsonObject.getString("build"))) {
             uri += "error" + "/";
         }
-        
+
         HttpClientRequest request = client.post(uri , new Handler<HttpClientResponse>() {
             @Override
             public void handle(HttpClientResponse event) {
