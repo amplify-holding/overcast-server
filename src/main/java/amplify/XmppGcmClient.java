@@ -10,9 +10,13 @@ import org.jivesoftware.smack.provider.PacketExtensionProvider;
 import org.jivesoftware.smack.provider.ProviderManager;
 import org.jivesoftware.smack.tcp.XMPPTCPConnection;
 import org.jivesoftware.smack.util.StringUtils;
+import org.vertx.java.core.Vertx;
+import org.vertx.java.core.eventbus.EventBus;
+import org.vertx.java.core.eventbus.impl.DefaultEventBus;
 import org.vertx.java.core.json.JsonObject;
 import org.vertx.java.core.logging.Logger;
 import org.vertx.java.core.logging.impl.LoggerFactory;
+import org.vertx.java.platform.Verticle;
 import org.xmlpull.v1.XmlPullParser;
 
 import javax.net.ssl.SSLSocketFactory;
@@ -28,8 +32,13 @@ public class XmppGcmClient {
 
     private static final String GCM_ELEMENT_NAME = "gcm";
     private static final String GCM_NAMESPACE = "google:mobile:data";
+    private final EventBus eventBus;
 
     private XMPPConnection xmppConnection;
+
+    public XmppGcmClient(EventBus eventBus) {
+        this.eventBus = eventBus;
+    }
 
     /**
      * Indicates whether the connection is in draining state, which means that it
@@ -130,14 +139,15 @@ public class XmppGcmClient {
      *
      * @return true if the message has been successfully sent.
      */
-    public boolean sendDownstreamMessage(String jsonRequest) throws
-            SmackException.NotConnectedException {
+    public boolean sendDownstreamMessage(String jsonRequest) throws SmackException.NotConnectedException {
         if (!connectionDraining) {
             send(jsonRequest);
-            return true;
         }
-        logger.info("Dropping downstream message since the connection is draining");
-        return false;
+        else {
+            logger.info("Dropping downstream message since the connection is draining");
+        }
+
+        return !connectionDraining;
     }
 
     public static String transformSendMessage(JsonObject sendMessage, String messageId) {
@@ -181,7 +191,9 @@ public class XmppGcmClient {
 
             @Override
             public void processPacket(Packet packet) {
-                logger.info("Received: " + packet.toXML());
+
+                //container.logger().info("Received: " + packet.toXML());
+                eventBus.send("send-metric", MetricsVerticle.getErrorMetricJson("Received: " + packet.toXML(), GASeverity.INFO));
                 Message incomingMessage = (Message) packet;
                 GcmPacketExtension gcmPacket =
                         (GcmPacketExtension) incomingMessage.
@@ -319,6 +331,7 @@ public class XmppGcmClient {
             sendDownstreamMessage(echo);
         } catch (SmackException.NotConnectedException e) {
             logger.warn("Not connected anymore, echo message is not sent", e);
+
         }
     }
 

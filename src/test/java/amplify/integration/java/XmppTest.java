@@ -20,7 +20,12 @@ public class XmppTest extends TestVerticle {
         vertx.eventBus().registerHandler("authenticated", new Handler<Message>() {
             @Override
             public void handle(Message event) {
-                startTests();
+                container.deployVerticle("amplify.MetricsVerticle", new AsyncResultHandler<String>() {
+                    @Override
+                    public void handle(AsyncResult<String> event) {
+                        startTests();
+                    }
+                });
             }
         });
 

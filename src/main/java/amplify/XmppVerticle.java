@@ -9,7 +9,7 @@ public class XmppVerticle extends Verticle {
     private static XmppGcmClient gcmClient;
 
     public void start() {
-        gcmClient = new XmppGcmClient();
+        gcmClient = new XmppGcmClient(vertx.eventBus());
         vertx.eventBus().registerHandler("start-gcm-services", new Handler<org.vertx.java.core.eventbus.Message<JsonObject>>() {
             @Override
             public void handle(org.vertx.java.core.eventbus.Message<JsonObject> message) {
@@ -45,9 +45,11 @@ public class XmppVerticle extends Verticle {
                     message.fail(0, e.toString());
                 }
                 container.logger().info("Sent back pong after a " + message.body());
+
             }
         });
 
         container.logger().info("Starting XMPP Verticle.");
+        vertx.eventBus().send("send-metric", MetricsVerticle.getErrorMetricJson("Starting XMPP Verticle.", GASeverity.INFO));
     }
 }

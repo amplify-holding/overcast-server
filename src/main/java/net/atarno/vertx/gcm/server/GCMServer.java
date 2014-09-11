@@ -18,6 +18,7 @@ package net.atarno.vertx.gcm.server;
 
 import amplify.GABuildType;
 import amplify.GASeverity;
+import amplify.MetricsVerticle;
 import org.vertx.java.busmods.BusModBase;
 import org.vertx.java.core.Handler;
 import org.vertx.java.core.VoidHandler;
@@ -57,7 +58,6 @@ public class GCMServer extends BusModBase implements Handler<Message<JsonObject>
     private int gcm_max_backoff_delay;
     private URI uri;
     private HttpClient client;
-    private static String session_id = String.valueOf(new Random().nextLong());
 
     @Override
     public void start() {
@@ -145,13 +145,13 @@ public class GCMServer extends BusModBase implements Handler<Message<JsonObject>
     @Override
     protected void sendError(Message<JsonObject> message, String error) {
         super.sendError(message, error);
-        vertx.eventBus().send("send-metric", getErrorMetricJson(error, GASeverity.ERROR));
+        vertx.eventBus().send("send-metric", MetricsVerticle.getErrorMetricJson(error, GASeverity.ERROR));
     }
 
     @Override
     protected void sendError(Message<JsonObject> message, String error, Exception e) {
         super.sendError(message, error, e);
-        vertx.eventBus().send("send-metric", getErrorMetricJson(error, GASeverity.ERROR));
+        vertx.eventBus().send("send-metric", MetricsVerticle.getErrorMetricJson(error, GASeverity.ERROR));
     }
 
     private JsonObject calculateSummary( JsonArray regIds, HashMap<String, JsonObject> response, long multicastId ) {
@@ -212,7 +212,7 @@ public class GCMServer extends BusModBase implements Handler<Message<JsonObject>
     private void send( Message<JsonObject> message, JsonObject notif, String apiKey ) {
         String debugString = "Sending POST to: " + gcm_url + " port:" + gcm_port + " with body: " + notif;
         logger.debug( debugString );
-        vertx.eventBus().send("send-metric", getErrorMetricJson(debugString, GASeverity.DEBUG));
+        vertx.eventBus().send("send-metric", MetricsVerticle.getErrorMetricJson(debugString, GASeverity.DEBUG));
         ResponseHelper helper = new ResponseHelper( gcm_min_backoff_delay );
 
         submitGCM( helper, notif, apiKey, message, 0 );
@@ -231,7 +231,7 @@ public class GCMServer extends BusModBase implements Handler<Message<JsonObject>
         }
         String debugString = "Attempt #" + ( attempt + 1 ) + " to send notification to regIds " + notif.getArray( "registration_ids" ).encode();
         logger.debug(debugString);
-        vertx.eventBus().send("send-metric", getErrorMetricJson(debugString, GASeverity.DEBUG));
+        vertx.eventBus().send("send-metric", MetricsVerticle.getErrorMetricJson(debugString, GASeverity.DEBUG));
         HttpClientRequest request = client.post( uri.getPath(), new Handler<HttpClientResponse>() {
             @Override
             public void handle( final HttpClientResponse resp ) {
@@ -255,7 +255,7 @@ public class GCMServer extends BusModBase implements Handler<Message<JsonObject>
                         }
                         else {
                             logger.error( "GCM error response: " + body );
-                            vertx.eventBus().send("send-metric", getErrorMetricJson( "GCM error response: " + body, GASeverity.ERROR));
+                            vertx.eventBus().send("send-metric", MetricsVerticle.getErrorMetricJson("GCM error response: " + body, GASeverity.ERROR));
                         }
                         if ( reply[ 0 ] != null ) {
                             helper.setMulticastId( reply[ 0 ].getLong( "multicast_id" ) == null ? 0 : reply[ 0 ].getLong( "multicast_id" ) );
@@ -300,17 +300,5 @@ public class GCMServer extends BusModBase implements Handler<Message<JsonObject>
 
     private String voidNull( String s ) {
         return s == null ? "" : s;
-    }
-
-    private JsonObject getErrorMetricJson(String message, GASeverity severity){
-
-        JsonObject jsonObject = new JsonObject();
-        jsonObject.putString("user_id", "http_gcm_server");
-        jsonObject.putString("session_id", session_id);
-        jsonObject.putString("build", GABuildType.QA.toString());
-        jsonObject.putString("message", message);
-        jsonObject.putString("message", severity.toString());
-
-        return jsonObject;
     }
 }
