@@ -29,7 +29,7 @@ public class MetricsTest extends TestVerticle {
 
     @Test
     public void testGameAnalytics() {
-        vertx.eventBus().send("send-metric", MetricsVerticle.getDesignMetricJson("test:callGA", 1.0), new Handler<Message<Integer>>() {
+        vertx.eventBus().send("send-metric", MetricsVerticle.getDesignMetricJson("test:callGA", "test", 1.0), new Handler<Message<Integer>>() {
             @Override
             public void handle(Message<Integer> event) {
                 assertEquals(200L, (long)event.body());

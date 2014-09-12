@@ -107,6 +107,12 @@
           <version>1.2</version>
           <scope>compile</scope>
       </dependency>
+      <dependency>
+          <groupId>commons-net</groupId>
+          <artifactId>commons-net</artifactId>
+          <version>3.3</version>
+          <scope>compile</scope>
+      </dependency>
   </dependencies>
 
 

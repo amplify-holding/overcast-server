@@ -3,6 +3,8 @@ package amplify;
 import org.vertx.java.core.AsyncResult;
 import org.vertx.java.core.AsyncResultHandler;
 import org.vertx.java.core.Handler;
+import org.vertx.java.core.MultiMap;
+import org.vertx.java.core.buffer.Buffer;
 import org.vertx.java.core.eventbus.Message;
 import org.vertx.java.core.http.HttpClient;
 import org.vertx.java.core.http.HttpServerRequest;
@@ -10,12 +12,20 @@ import org.vertx.java.core.json.JsonArray;
 import org.vertx.java.core.json.JsonObject;
 import org.vertx.java.platform.Verticle;
 
+import java.io.IOException;
+
 
 public class MainVerticle extends Verticle {
     private String address;
-    private HttpClient client;
 
     public void start() {
+        try {
+            NTPClient.syncServerTime("time-d.nist.gov");
+        } catch (IOException e) {
+            container.logger().error(e.toString(), e);
+            vertx.eventBus().send("send-metric", MetricsVerticle.getErrorMetricJson(e.toString(), GASeverity.ERROR));
+        }
+
         container.deployVerticle("amplify.MetricsVerticle", new Handler<AsyncResult<String>>() {
             @Override
             public void handle(AsyncResult<String> event) {
@@ -27,29 +37,67 @@ public class MainVerticle extends Verticle {
         vertx.createHttpServer().requestHandler(new Handler<HttpServerRequest>() {
             public void handle(HttpServerRequest request) {
                 container.logger().info("A request has arrived on the server!");
-                if(request.path().contains("xmpp/performance")) {
+
+                if (request.path().contains("http/performance/metrics")) {
+                    MultiMap params = request.params();
+
+                    final String startTimeEncoded = params.get("sentTime");
+                    final String endTimeEncoded = params.get("receivedTime");
+
+                    request.bodyHandler(new Handler<Buffer>() {
+                        @Override
+                        public void handle(Buffer event) {
+                            sendDurationMetric(startTimeEncoded, endTimeEncoded, event.toString(), "http");
+                        }
+                    });
+                } else if (request.path().contains("xmpp/performance/metrics")) {
+                    MultiMap params = request.params();
+
+                    final String startTimeEncoded = params.get("sentTime");
+                    final String endTimeEncoded = params.get("receivedTime");
+
+                    request.bodyHandler(new Handler<Buffer>() {
+                        @Override
+                        public void handle(Buffer event) {
+                            sendDurationMetric(startTimeEncoded, endTimeEncoded, event.toString(), "xmpp");
+                        }
+                    });
+                } else if (request.path().contains("xmpp/performance")) {
                     container.logger().info("sending a xmpp message!");
-
-                    JsonObject payload = new JsonObject();
-                    JsonObject messageParams = new JsonObject();
-                    payload.putString("Hello", "World");
-                    payload.putString("CCS", "Dummy Message");
-
-                    messageParams.putObject("payload", payload);
-                    messageParams.putString("collapseKey", "sample");
-                    messageParams.putString("toRegId", "APA91bGmNQVWs0apw3ioVOGAqlbBw2lLxvw3jTBcBfgP_6Mr0u-900Fg9UOnXrsWO1woniZ_JwmMiZlXRHZ4BeFLGq89qp2PWpaif7br9F0l4Q612LFXGjIuUkNLC6UkHSozLYZiwvSNFX8ju9FAdYY0oTcEByloeA");
-                    messageParams.putNumber("timeToLive", 10000L);
-                    messageParams.putBoolean("delayWhileIdle", true);
-
-                    vertx.eventBus().send("send-message", messageParams);
-                }
-                else if (request.path().contains("http/performance")) {
-                    callHttp();
+                    callXmpp(true);
+                } else if (request.path().contains("http/performance")) {
+                    callHttp(true);
                 }
 
                 request.response().end();
             }
-        }).listen(8080, "localhost");
+        }).listen(8080, "192.168.1.9");
+    }
+
+    private void callXmpp(boolean withCollapseKey) {
+        JsonObject payload = new JsonObject();
+        JsonObject messageParams = new JsonObject();
+        payload.putString("Hello", "World");
+        payload.putString("CCS", "Dummy Message");
+
+        messageParams.putObject("payload", payload);
+        if(withCollapseKey)
+            messageParams.putString("collapseKey", "sample");
+        messageParams.putString("toRegId", "APA91bHuZ-obPLppJuN_JtS5HWS55k8YcJyQYAzyp1x4jz678rxhRhtYlAcGHryf9z5eS5WxaaCdJJKdRccGJNb4T70OTFrW5FNYje1_U2wcg7X5lwhbZZ-d1pTDodU7_7zvna_Z5_hJIQKQKaENQzIg6fvcLqx-AQ");
+        messageParams.putNumber("timeToLive", 10000L);
+        messageParams.putBoolean("delayWhileIdle", true);
+
+        vertx.eventBus().send("send-message", messageParams);
+    }
+
+    private void sendDurationMetric(String startTimeEncoded, String endTimeEncoded, String regId, String protocol) {
+        long startTime = Long.getLong(startTimeEncoded, Long.MAX_VALUE);
+        long endTime = Long.getLong(endTimeEncoded, Long.MIN_VALUE);
+
+        double timeInSeconds = (endTime - startTime) / 1000.0;
+
+        container.logger().trace("Transmission duration(s): " + timeInSeconds + ", for reg id:" + regId);
+        vertx.eventBus().send("send-metric", MetricsVerticle.getDesignMetricJson("performance:+"+protocol+":travelTime", regId, timeInSeconds));
     }
 
     private void setupXmpp() {
@@ -90,7 +138,7 @@ public class MainVerticle extends Verticle {
         });
     }
 
-    private void callHttp() {
+    private void callHttp(boolean withCollapseKey) {
         JsonObject notif = new JsonObject();
         notif.putString( "api_key",  "AIzaSyDDGDRptJWLROo7XFhYVinwH4fQ1r0o5Qw" );
 
@@ -99,21 +147,23 @@ public class MainVerticle extends Verticle {
         data.putString( "sender", "vertx-gcm" );
         data.putString( "message_title", "Test * Test * Test" );
         data.putString( "message_text", "Hello world" );
+        data.putString( "sent-time", NTPClient.getSyncedTime().toString());
+        data.putString( "protocol-used", "http");
 
         JsonObject n = new JsonObject();
-        n.putString( "collapse_key", "key" );
+        if(withCollapseKey)
+            n.putString( "collapse_key", "key" );
         n.putNumber( "time_to_live", 60 * 10 );
         n.putBoolean( "delay_while_idle", false );
         n.putObject( "data", data );
         n.putArray( "registration_ids", new JsonArray(
-                new String[]{ "token0",
-                        "APA91bGmNQVWs0apw3ioVOGAqlbBw2lLxvw3jTBcBfgP_6Mr0u-900Fg9UOnXrsWO1woniZ_JwmMiZlXRHZ4BeFLGq89qp2PWpaif7br9F0l4Q612LFXGjIuUkNLC6UkHSozLYZiwvSNFX8ju9FAdYY0oTcEByloeA"
+                new String[]{"APA91bHuZ-obPLppJuN_JtS5HWS55k8YcJyQYAzyp1x4jz678rxhRhtYlAcGHryf9z5eS5WxaaCdJJKdRccGJNb4T70OTFrW5FNYje1_U2wcg7X5lwhbZZ-d1pTDodU7_7zvna_Z5_hJIQKQKaENQzIg6fvcLqx-AQ"
                             } ) );
 
         notif.putObject( "notification", n );
         Handler<Message<JsonObject>> replyHandler = new Handler<Message<JsonObject>>() {
             public void handle( Message<JsonObject> message ) {
-                System.out.println("Http received: \n" + message.body().encode());
+                container.logger().debug("Http received: \n" + message.body().encode());
             }
         };
         vertx.eventBus().send( address, notif, replyHandler );

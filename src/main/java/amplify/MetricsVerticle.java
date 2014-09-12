@@ -66,10 +66,10 @@ public class MetricsVerticle extends Verticle {
         return jsonObject;
     }
 
-    public static JsonObject getDesignMetricJson(String eventId, double value){
+    public static JsonObject getDesignMetricJson(String eventId, String userId, double value){
 
         JsonObject jsonObject = new JsonObject();
-        jsonObject.putString("user_id", "overcast_server");
+        jsonObject.putString("user_id", userId);
         jsonObject.putString("session_id", session_id);
         jsonObject.putString("build", GABuildType.DESIGN.toString());
         jsonObject.putString("event_id", eventId);
