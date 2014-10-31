@@ -4,7 +4,9 @@ import org.jivesoftware.smack.SmackException;
 import org.vertx.java.core.Handler;
 import org.vertx.java.core.json.JsonObject;
 import org.vertx.java.platform.Verticle;
-
+/*
+ * This verticle is responsible for GCM features that require XMPP
+ */
 public class XmppVerticle extends Verticle {
     private static XmppGcmClient gcmClient;
 
